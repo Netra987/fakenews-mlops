@@ -143,7 +143,7 @@ CloudWatch Monitoring
 
 ---
 
-## Syllabus Coverage
+## Topics Coverage
 
 | Topic | Implementation |
 |-------|----------------|
