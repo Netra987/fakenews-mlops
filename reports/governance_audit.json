@@ -1,0 +1,11 @@
+{
+  "model_version": "v1.0",
+  "dataset_size": 8980,
+  "class_balance": {
+    "0": 4696,
+    "1": 4284
+  },
+  "training_data_source": "Kaggle - Fake and Real News Dataset",
+  "known_limitations": "Trained on US political news only. May not generalize to other domains.",
+  "gdpr_notes": "No personal data used. Dataset is public domain."
+}
