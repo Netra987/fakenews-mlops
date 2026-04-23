@@ -15,19 +15,37 @@ function App() {
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [lastAnalyzedText, setLastAnalyzedText] = useState("");
+  const [error, setError] = useState("");
+
+  const getSimulatedTruth = (inputText) => {
+    const hash = inputText
+      .split("")
+      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return hash % 2 === 0 ? "REAL" : "FAKE";
+  };
 
   const analyzeNews = async () => {
     if (!text.trim()) return;
     setLoading(true);
+    setError("");
 
     try {
       const res = await axios.post("http://127.0.0.1:8000/predict", { text });
       setResult(res.data);
-      setHistory((prev) => [...prev, res.data]);
+      const truthLabel = getSimulatedTruth(text);
+      setHistory((prev) => [
+        ...prev,
+        {
+          ...res.data,
+          expectedLabel: truthLabel,
+          isCorrect: res.data.prediction === truthLabel,
+        },
+      ]);
       setLastAnalyzedText(text);
       setActiveSection("dashboard");
     } catch (err) {
       console.log(err);
+      setError("Prediction failed. Please check that backend API is running on port 8000.");
     } finally {
       setLoading(false);
     }
@@ -46,8 +64,16 @@ function App() {
             placeholder="Paste news article text here..."
           />
           <button onClick={analyzeNews} disabled={loading}>
-            {loading ? "Analyzing..." : "Run Prediction"}
+            {loading ? (
+              <span className="button-loading">
+                <span className="spinner" />
+                Analyzing...
+              </span>
+            ) : (
+              "Run Prediction"
+            )}
           </button>
+          {error && <p className="error-text">{error}</p>}
         </header>
 
         {activeSection === "analyze" && (
@@ -61,14 +87,14 @@ function App() {
           <section className="grid-stack">
             <PredictionCard result={result} />
             <ChartsPanel result={result} />
-            <MetricsDashboard />
+            <MetricsDashboard history={history} />
             <MonitoringPanel history={history} />
           </section>
         )}
 
         {activeSection === "insights" && (
           <section className="grid-stack">
-            <MetricsDashboard />
+            <MetricsDashboard history={history} />
             <DatasetInsights />
             <ABTestingPanel history={history} />
             <MonitoringPanel history={history} />

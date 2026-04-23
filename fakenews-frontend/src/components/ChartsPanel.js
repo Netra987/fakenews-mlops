@@ -27,8 +27,16 @@ const ChartsPanel = ({ result }) => {
   }
 
   const probabilityData = [
-    { name: "Fake", value: result.probabilities.fake, color: COLORS.fake },
-    { name: "Real", value: result.probabilities.real, color: COLORS.real },
+    {
+      name: "Fake",
+      value: result.prob_fake ?? result.probabilities?.fake ?? 0,
+      color: COLORS.fake,
+    },
+    {
+      name: "Real",
+      value: result.prob_real ?? result.probabilities?.real ?? 0,
+      color: COLORS.real,
+    },
   ];
 
   const importanceData = result.top_words.map((item) => ({
