@@ -1,6 +1,15 @@
 models/saved
 venv/
+mlops_env/
 __pycache__/
 *.pyc
 mlruns/
 reports/drift_report.html
+
+node_modules/
+
+# Environment
+.env
+
+# OS files
+.DS_Store
