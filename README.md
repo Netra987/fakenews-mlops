@@ -69,7 +69,7 @@ pip install -r requirements.txt
 The model file is 255MB and cannot be stored on GitHub.
 It is tracked via DVC and hosted on Google Drive.
 
-1. Download the model folder from: https://drive.google.com/drive/folders/1Gf4ZABfJPIYLUph9tt3cV5vsa3kdAfnl?usp=sharing
+1. Download the model folder from: https://drive.google.com/drive/folders/1cZe3HeClpPJVQjVdx83r-JIjtZdFnWt4?usp=sharing
 2. You will find these 4 files inside:
    - `config.json`
    - `model.safetensors`
