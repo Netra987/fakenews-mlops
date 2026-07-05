@@ -1,12 +1,24 @@
 name: CI Pipeline
 on: [push, pull_request]
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
-      - run: pip install pandas scikit-learn pytest
-      - run: python -m pytest tests/ -v
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov httpx
+
+      - name: Run structural checks
+        run: python -m pytest tests/test_preprocess.py -v
+
+      - name: Run API behavioral tests
+        run: python -m pytest tests/test_app.py -v --cov=src.app --cov-report=term-missing

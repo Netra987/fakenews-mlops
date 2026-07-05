@@ -1,3 +1,8 @@
+"""
+Structural checks — confirms expected files exist in the repo layout.
+These verify project structure only, not application behavior.
+See test_app.py for real behavioral tests.
+"""
 import os
 import sys
 
