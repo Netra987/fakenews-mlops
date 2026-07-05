@@ -297,3 +297,24 @@
     border-bottom: 1px solid #1e293b;
   }
 }
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #1f2937;
+}
+
+.feedback-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.feedback-btn.real:hover { border-color: #22c55e; color: #22c55e; }
+.feedback-btn.fake:hover { border-color: #ef4444; color: #ef4444; }

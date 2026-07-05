@@ -13,16 +13,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState("analyze");
   const [result, setResult] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState([]);          // raw predictions, for A/B + monitoring
+  const [feedbackHistory, setFeedbackHistory] = useState([]); // only user-labeled ones
   const [lastAnalyzedText, setLastAnalyzedText] = useState("");
   const [error, setError] = useState("");
-
-  const getSimulatedTruth = (inputText) => {
-    const hash = inputText
-      .split("")
-      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    return hash % 2 === 0 ? "REAL" : "FAKE";
-  };
+  const [currentPredictionId, setCurrentPredictionId] = useState(null);
 
   const analyzeNews = async () => {
     if (!text.trim()) return;
@@ -30,25 +25,39 @@ function App() {
     setError("");
 
     try {
-      const res = await axios.post("http://127.0.0.1:8000/predict", { text });
-      setResult(res.data);
-      const truthLabel = getSimulatedTruth(text);
-      setHistory((prev) => [
-        ...prev,
-        {
-          ...res.data,
-          expectedLabel: truthLabel,
-          isCorrect: res.data.prediction === truthLabel,
-        },
-      ]);
+      const res = await axios.post(
+        process.env.REACT_APP_API_URL || "http://127.0.0.1:8000/predict",
+        { text }
+      );
+      const predictionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setResult({ ...res.data, predictionId });
+      setCurrentPredictionId(predictionId);
+      setHistory((prev) => [...prev, { ...res.data, predictionId }]);
       setLastAnalyzedText(text);
       setActiveSection("dashboard");
     } catch (err) {
       console.log(err);
-      setError("Prediction failed. Please check that backend API is running on port 8000.");
+      setError("Prediction failed. Please check that backend API is running.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Called when the user clicks 👍/👎 on a prediction.
+  const submitFeedback = (userLabel) => {
+    if (!result || !currentPredictionId) return;
+    setFeedbackHistory((prev) => [
+      ...prev,
+      {
+        predictionId: currentPredictionId,
+        text: lastAnalyzedText.slice(0, 60),
+        prediction: result.prediction,
+        confidence: result.confidence,
+        userLabel,
+        isCorrect: result.prediction === userLabel,
+        timestamp: Date.now(),
+      },
+    ]);
   };
 
   return (
@@ -78,23 +87,31 @@ function App() {
 
         {activeSection === "analyze" && (
           <section className="grid-stack">
-            <PredictionCard result={result} />
+            <PredictionCard
+              result={result}
+              onFeedback={submitFeedback}
+              feedbackGiven={feedbackHistory.some((f) => f.predictionId === currentPredictionId)}
+            />
             <ExplanationPanel result={result} inputText={lastAnalyzedText} />
           </section>
         )}
 
         {activeSection === "dashboard" && (
           <section className="grid-stack">
-            <PredictionCard result={result} />
+            <PredictionCard
+              result={result}
+              onFeedback={submitFeedback}
+              feedbackGiven={feedbackHistory.some((f) => f.predictionId === currentPredictionId)}
+            />
             <ChartsPanel result={result} />
-            <MetricsDashboard history={history} />
+            <MetricsDashboard feedbackHistory={feedbackHistory} />
             <MonitoringPanel history={history} />
           </section>
         )}
 
         {activeSection === "insights" && (
           <section className="grid-stack">
-            <MetricsDashboard history={history} />
+            <MetricsDashboard feedbackHistory={feedbackHistory} />
             <DatasetInsights />
             <ABTestingPanel history={history} />
             <MonitoringPanel history={history} />
