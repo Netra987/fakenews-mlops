@@ -41,8 +41,8 @@ export const DatasetInsights = () => {
 };
 
 export const ABTestingPanel = ({ history }) => {
-  const modelA = history.filter((item) => (item.model || item.model_used) === "A").length;
-  const modelB = history.filter((item) => (item.model || item.model_used) === "B").length;
+  const modelA = history.filter((item) => item.model_used === "A").length;
+  const modelB = history.filter((item) => item.model_used === "B").length;
   const total = history.length || 1;
   const usageA = Math.round((modelA / total) * 100);
   const usageB = Math.round((modelB / total) * 100);
@@ -51,16 +51,16 @@ export const ABTestingPanel = ({ history }) => {
       ? 0
       : Math.round(
           history
-            .filter((item) => (item.model || item.model_used) === "A")
-            .reduce((sum, item) => sum + (item.latency ?? item.latency_ms ?? 0), 0) / modelA
+            .filter((item) => item.model_used === "A")
+            .reduce((sum, item) => sum + (item.latency_ms ?? 0), 0) / modelA
         );
   const avgLatencyB =
     modelB === 0
       ? 0
       : Math.round(
           history
-            .filter((item) => (item.model || item.model_used) === "B")
-            .reduce((sum, item) => sum + (item.latency ?? item.latency_ms ?? 0), 0) / modelB
+            .filter((item) => item.model_used === "B")
+            .reduce((sum, item) => sum + (item.latency_ms ?? 0), 0) / modelB
         );
 
   return (
@@ -118,9 +118,9 @@ export const MonitoringPanel = ({ history }) => {
         <p className="muted">Last 5 predictions</p>
         {history.slice(-5).reverse().map((item, index) => (
           <div key={`${item.prediction}-${index}`} className="history-item">
-            <span>{item.label || item.prediction}</span>
+            <span>{item.prediction}</span>
             <span>{Math.round(item.confidence * 100)}%</span>
-            <span>Model {item.model || item.model_used}</span>
+            <span>Model {item.model_used}</span>
           </div>
         ))}
       </div>
