@@ -2,28 +2,57 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter
+from dotenv import load_dotenv
 import torch
 import time
+import time as time_module
 import re
 import math
 import random
 import logging
+import os
+import json as json_module
+
+load_dotenv()
 
 app = FastAPI(title="Fake News Detector")
 
-# ✅ CORS FIRST (important)
+# CORS — reads from .env locally, from Render env var in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- Prometheus instrumentation -------------------------------------------
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
+prediction_counter = Counter(
+    "fakenews_predictions_total",
+    "Total predictions made, labeled by predicted class",
+    ["prediction"],
+)
+low_confidence_counter = Counter(
+    "fakenews_low_confidence_total",
+    "Total predictions where model was uncertain or low-confidence",
+)
+ab_model_counter = Counter(
+    "fakenews_model_ab_total",
+    "Total requests served by each A/B model variant",
+    ["model"],
+)
+# --------------------------------------------------------------------------
+
+SERVICE_START_TIME = time_module.time()
+MODEL_VERSION = "v3.0"
+
 # Load model
 tokenizer = AutoTokenizer.from_pretrained("models/saved")
 model = AutoModelForSequenceClassification.from_pretrained("models/saved")
-
 model.eval()
 device = torch.device("cpu")
 model.to(device)
@@ -31,10 +60,10 @@ model.to(device)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("fakenews-api")
 
-# In-memory structures for lightweight analytics and A/B monitoring.
 request_history = []
 document_frequency = {}
 doc_count = 0
+
 
 class Article(BaseModel):
     text: str
@@ -56,28 +85,14 @@ def extract_top_words(text: str, fake_prob: float, real_prob: float):
         return []
 
     stop_words = {
-        "this",
-        "that",
-        "with",
-        "from",
-        "have",
-        "were",
-        "they",
-        "their",
-        "about",
-        "there",
-        "would",
-        "could",
-        "should",
-        "after",
-        "before",
+        "this", "that", "with", "from", "have", "were", "they", "their",
+        "about", "there", "would", "could", "should", "after", "before",
         "because",
     }
     filtered = [word for word in words if word not in stop_words]
     if not filtered:
         filtered = words
 
-    # Maintain DF stats to compute lightweight TF-IDF-like contribution score.
     doc_count += 1
     unique_words = set(filtered)
     for token in unique_words:
@@ -109,7 +124,7 @@ def predict(article: Article):
         return_tensors="pt",
         truncation=True,
         max_length=256,
-        padding=True
+        padding=True,
     ).to(device)
 
     with torch.no_grad():
@@ -123,25 +138,25 @@ def predict(article: Article):
     base_prediction = "REAL" if pred == 1 else "FAKE"
     label = _safe_label_from_confidence(base_prediction, confidence)
     top_words = extract_top_words(article.text, fake_prob, real_prob)
-    # 70/30 randomized routing for A/B split.
     model_used = "A" if random.random() < 0.7 else "B"
     latency_ms = int((time.perf_counter() - start_time) * 1000)
-    request_history.append(
-        {
-            "model": model_used,
-            "latency_ms": latency_ms,
-            "confidence": confidence,
-            "prediction": base_prediction,
-        }
-    )
+
+    # Prometheus counters
+    prediction_counter.labels(prediction=base_prediction).inc()
+    ab_model_counter.labels(model=model_used).inc()
+    if label in ("UNCERTAIN", "LOW CONFIDENCE"):
+        low_confidence_counter.inc()
+
+    request_history.append({
+        "model": model_used,
+        "latency_ms": latency_ms,
+        "confidence": confidence,
+        "prediction": base_prediction,
+    })
 
     logger.info(
         "prediction=%s label=%s conf=%.4f model=%s latency_ms=%s",
-        base_prediction,
-        label,
-        confidence,
-        model_used,
-        latency_ms,
+        base_prediction, label, confidence, model_used, latency_ms,
     )
 
     return {
@@ -155,13 +170,11 @@ def predict(article: Article):
             "real": round(real_prob, 4),
         },
         "top_words": top_words,
-        "model": model_used,
-        "latency": latency_ms,
         "model_used": model_used,
         "latency_ms": latency_ms,
         "ab_metrics": {
             "total_requests": len(request_history),
-            "model_a_count": len([item for item in request_history if item["model"] == "A"]),
-            "model_b_count": len([item for item in request_history if item["model"] == "B"]),
+            "model_a_count": len([i for i in request_history if i["model"] == "A"]),
+            "model_b_count": len([i for i in request_history if i["model"] == "B"]),
         },
     }
