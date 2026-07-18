@@ -115,6 +115,69 @@ def extract_top_words(text: str, fake_prob: float, real_prob: float):
     scored_words.sort(key=lambda item: item["impact"], reverse=True)
     return scored_words[:5]
 
+@app.get("/health")
+def health():
+    """
+    Liveness check — answers instantly without running inference.
+    Used by Render, load balancers, and monitoring tools.
+    """
+    return {
+        "status": "ok",
+        "model_version": MODEL_VERSION,
+        "model_loaded": model is not None,
+        "uptime_seconds": int(time_module.time() - SERVICE_START_TIME),
+    }
+
+
+@app.get("/metrics/summary")
+def metrics_summary():
+    """
+    Aggregates request_history server-side as JSON for the React
+    frontend dashboard. Plain JSON — not Prometheus format.
+    Survives page refresh since data lives on the server.
+    """
+    total = len(request_history)
+    if total == 0:
+        return {
+            "total_predictions": 0,
+            "avg_confidence": 0.0,
+            "fake_pct": 0.0,
+            "real_pct": 0.0,
+            "avg_latency_ms": 0,
+            "model_a_count": 0,
+            "model_b_count": 0,
+        }
+    avg_confidence = sum(item["confidence"] for item in request_history) / total
+    fake_count = sum(1 for item in request_history if item["prediction"] == "FAKE")
+    avg_latency = sum(item["latency_ms"] for item in request_history) / total
+    model_a_count = sum(1 for item in request_history if item["model"] == "A")
+    model_b_count = sum(1 for item in request_history if item["model"] == "B")
+    return {
+        "total_predictions": total,
+        "avg_confidence": round(avg_confidence, 4),
+        "fake_pct": round((fake_count / total) * 100, 1),
+        "real_pct": round(((total - fake_count) / total) * 100, 1),
+        "avg_latency_ms": round(avg_latency, 1),
+        "model_a_count": model_a_count,
+        "model_b_count": model_b_count,
+    }
+
+
+@app.get("/dataset/stats")
+def dataset_stats():
+    """
+    Serves precomputed dataset statistics from reports/dataset_stats.json.
+    Generated offline by scripts/compute_dataset_stats.py — not computed
+    per-request since train.csv is 92MB.
+    """
+    stats_path = "reports/dataset_stats.json"
+    if not os.path.exists(stats_path):
+        return {
+            "error": "Dataset stats not yet computed.",
+            "fix": "Run: python scripts/compute_dataset_stats.py"
+        }
+    with open(stats_path, encoding="utf-8") as f:
+        return json_module.load(f)
 
 @app.post("/predict")
 def predict(article: Article):

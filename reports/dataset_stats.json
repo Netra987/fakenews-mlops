@@ -1,0 +1,24 @@
+{
+  "total_articles": 42826,
+  "class_distribution": {
+    "fake": {
+      "count": 21413,
+      "percentage": 50.0
+    },
+    "real": {
+      "count": 21413,
+      "percentage": 50.0
+    }
+  },
+  "avg_article_length_words": 389.4,
+  "top_frequent_words": [
+    "trump",
+    "state",
+    "people",
+    "president",
+    "reuters",
+    "government",
+    "house",
+    "news"
+  ]
+}
