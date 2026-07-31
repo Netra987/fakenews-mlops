@@ -51,8 +51,9 @@ SERVICE_START_TIME = time_module.time()
 MODEL_VERSION = "v3.0"
 
 # Load model
-tokenizer = AutoTokenizer.from_pretrained("models/saved")
-model = AutoModelForSequenceClassification.from_pretrained("models/saved")
+MODEL_ID = os.getenv("MODEL_ID", "netra05/fakenews-distilbert")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
 model.eval()
 device = torch.device("cpu")
 model.to(device)
