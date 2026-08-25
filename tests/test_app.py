@@ -16,68 +16,32 @@ your governance_audit.json validation metrics.
 import sys
 import os
 from unittest.mock import patch, MagicMock
-import torch
 import pytest
 
-# Make sure Python can find your src/ folder
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 
 @pytest.fixture
 def client():
     """
-    Builds a TestClient with model loading mocked out.
-
-    IMPORTANT: We patch BEFORE importing app.py because app.py runs
-    AutoTokenizer.from_pretrained() and AutoModelForSequenceClassification
-    .from_pretrained() at module level (import time), not inside a function.
-    If we imported app first, it would try to load the real model immediately
-    and fail in CI.
-
-    The with block means: "while this block is running, replace the real
-    from_pretrained with our fake version. When the block exits, restore
-    the original automatically."
+    Builds a TestClient with HuggingFace API calls mocked out.
+    No model loading needed — we mock the HTTP call to HF Inference API.
     """
-    with patch(
-        "transformers.AutoTokenizer.from_pretrained"
-    ) as mock_tokenizer_loader, patch(
-        "transformers.AutoModelForSequenceClassification.from_pretrained"
-    ) as mock_model_loader:
+    with patch("src.app.hf_requests.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            [
+                {"label": "LABEL_0", "score": 0.05},
+                {"label": "LABEL_1", "score": 0.95},
+            ]
+        ]
+        mock_post.return_value = mock_response
 
-        # --- Fake tokenizer ---
-        # A real tokenizer returns a dict with input_ids and attention_mask.
-        # Our fake returns the same shape so the model call doesn't crash.
-        mock_tokenizer = MagicMock()
-        fake_token_output = {
-            "input_ids": torch.tensor([[101, 2054, 102]]),
-            "attention_mask": torch.tensor([[1, 1, 1]]),
-        }
-        # The tokenizer output also needs a .to(device) method
-        # because app.py calls .to(device) on the tokenizer output.
-        mock_token_obj = MagicMock()
-        mock_token_obj.__getitem__ = lambda self, key: fake_token_output[key]
-        mock_token_obj.to = lambda device: mock_token_obj
-        mock_tokenizer.return_value = mock_token_obj
-        mock_tokenizer_loader.return_value = mock_tokenizer
-
-        # --- Fake model ---
-        # A real model returns an object with a .logits attribute.
-        # We fix logits to [[0.2, 1.8]] which always predicts REAL (index 1)
-        # so our tests have deterministic, predictable results.
-        mock_model = MagicMock()
-        fake_logits = torch.tensor([[0.2, 1.8]])
-        mock_output = MagicMock()
-        mock_output.logits = fake_logits
-        mock_model.return_value = mock_output
-        mock_model.eval.return_value = None
-        mock_model.to.return_value = mock_model
-        mock_model_loader.return_value = mock_model
-
-        # NOW import app — patches are active so from_pretrained hits our fakes
         from fastapi.testclient import TestClient
         from src.app import app
-
         yield TestClient(app)
+
+
+        
 
 
 # ─────────────────────────────────────────────

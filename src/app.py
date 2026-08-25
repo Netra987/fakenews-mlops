@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
 from dotenv import load_dotenv
-import torch
+import requests as hf_requests
 import time
 import time as time_module
 import re
@@ -19,7 +18,6 @@ load_dotenv()
 
 app = FastAPI(title="Fake News Detector")
 
-# CORS — reads from .env locally, from Render env var in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
@@ -28,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Prometheus instrumentation -------------------------------------------
+# --- Prometheus -----------------------------------------------------------
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 prediction_counter = Counter(
@@ -45,18 +43,17 @@ ab_model_counter = Counter(
     "Total requests served by each A/B model variant",
     ["model"],
 )
-# --------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 
 SERVICE_START_TIME = time_module.time()
 MODEL_VERSION = "v3.0"
 
-# Load model
+# HuggingFace Inference API — model runs on HF servers, not locally.
+# This avoids the 512MB RAM limit on Render's free tier.
 MODEL_ID = os.getenv("MODEL_ID", "netra05/fakenews-distilbert")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-model.eval()
-device = torch.device("cpu")
-model.to(device)
+HF_API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("fakenews-api")
@@ -116,27 +113,32 @@ def extract_top_words(text: str, fake_prob: float, real_prob: float):
     scored_words.sort(key=lambda item: item["impact"], reverse=True)
     return scored_words[:5]
 
+
+@app.get("/dataset/stats")
+def dataset_stats():
+    stats_path = "reports/dataset_stats.json"
+    if not os.path.exists(stats_path):
+        return {
+            "error": "Dataset stats not yet computed.",
+            "fix": "Run: python scripts/compute_dataset_stats.py"
+        }
+    with open(stats_path, encoding="utf-8") as f:
+        return json_module.load(f)
+
+
 @app.get("/health")
 def health():
-    """
-    Liveness check — answers instantly without running inference.
-    Used by Render, load balancers, and monitoring tools.
-    """
     return {
         "status": "ok",
         "model_version": MODEL_VERSION,
-        "model_loaded": model is not None,
+        "model_loaded": True,
+        "model_source": "HuggingFace Inference API",
         "uptime_seconds": int(time_module.time() - SERVICE_START_TIME),
     }
 
 
 @app.get("/metrics/summary")
 def metrics_summary():
-    """
-    Aggregates request_history server-side as JSON for the React
-    frontend dashboard. Plain JSON — not Prometheus format.
-    Survives page refresh since data lives on the server.
-    """
     total = len(request_history)
     if total == 0:
         return {
@@ -164,40 +166,32 @@ def metrics_summary():
     }
 
 
-@app.get("/dataset/stats")
-def dataset_stats():
-    """
-    Serves precomputed dataset statistics from reports/dataset_stats.json.
-    Generated offline by scripts/compute_dataset_stats.py — not computed
-    per-request since train.csv is 92MB.
-    """
-    stats_path = "reports/dataset_stats.json"
-    if not os.path.exists(stats_path):
-        return {
-            "error": "Dataset stats not yet computed.",
-            "fix": "Run: python scripts/compute_dataset_stats.py"
-        }
-    with open(stats_path, encoding="utf-8") as f:
-        return json_module.load(f)
-
 @app.post("/predict")
 def predict(article: Article):
     start_time = time.perf_counter()
-    inputs = tokenizer(
-        article.text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=256,
-        padding=True,
-    ).to(device)
 
-    with torch.no_grad():
-        logits = model(**inputs).logits
+    # Call HuggingFace Inference API
+    try:
+        hf_response = hf_requests.post(
+            HF_API_URL,
+            headers=HF_HEADERS,
+            json={"inputs": article.text[:512]},
+            timeout=60,
+        )
+        hf_result = hf_response.json()
+        if isinstance(hf_result, list):
+            scores = hf_result[0] if isinstance(hf_result[0], list) else hf_result
+            label_map = {item["label"]: item["score"] for item in scores}
+            fake_prob = float(label_map.get("LABEL_0", 0.5))
+            real_prob = float(label_map.get("LABEL_1", 0.5))
+        else:
+            logger.warning("Unexpected HF API response: %s", hf_result)
+            fake_prob, real_prob = 0.5, 0.5
+    except Exception as e:
+        logger.error("HF API call failed: %s", e)
+        fake_prob, real_prob = 0.5, 0.5
 
-    pred = logits.argmax(-1).item()
-    probs = torch.softmax(logits, dim=-1).squeeze().tolist()
-    fake_prob = float(probs[0])
-    real_prob = float(probs[1])
+    pred = 0 if fake_prob > real_prob else 1
     confidence = max(fake_prob, real_prob)
     base_prediction = "REAL" if pred == 1 else "FAKE"
     label = _safe_label_from_confidence(base_prediction, confidence)
