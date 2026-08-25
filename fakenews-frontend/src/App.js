@@ -26,9 +26,9 @@ function App() {
 
     try {
       const res = await axios.post(
-        process.env.REACT_APP_API_URL || "http://127.0.0.1:8000/predict",
-        { text }
-      );
+  `${process.env.REACT_APP_API_URL || "http://127.0.0.1:8000"}/predict`,
+  { text }
+);
       const predictionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setResult({ ...res.data, predictionId });
       setCurrentPredictionId(predictionId);
