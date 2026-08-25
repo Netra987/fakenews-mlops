@@ -5,23 +5,22 @@ architecture = """
 ║                                                              ║
 ║  DATA LAYER          TRAINING LAYER      SERVING LAYER       ║
 ║  ─────────────       ──────────────      ────────────        ║
-║  Kaggle Dataset  →   Google Colab    →   FastAPI App         ║
-║  DVC Versioning      DistilBERT          Docker Container    ║
-║  data/raw/           MLflow Tracking     Port 8000           ║
-║  data/processed/     99.9% Accuracy      /predict endpoint   ║
+║  Kaggle Dataset  →   Google Colab    →   FastAPI on Render   ║
+║  DVC Versioning      DistilBERT          HF Inference API    ║
+║  data/raw/           MLflow Tracking     /predict endpoint   ║
+║  data/processed/     99.9% Accuracy      Swagger UI          ║
 ║                                                              ║
 ║  CICD LAYER          MONITORING LAYER    GOVERNANCE LAYER    ║
 ║  ──────────          ───────────────     ────────────────    ║
-║  GitHub Actions  →   Evidently AI    →   Model Card         ║
-║  Auto Tests          Drift Detection     Fairness Report     ║
-║  On Every Push       Drift Score: 0.83   Audit Trail        ║
-║                      Alerts Triggered    GDPR Compliant      ║
+║  GitHub Actions  →   Prometheus      →   Model Card         ║
+║  17 Real Tests       Evidently AI        Fairness Report     ║
+║  On Every Push       Drift Score: 0.83   GDPR Compliant      ║
 ║                                                              ║
-║  CLOUD LAYER                                                 ║
-║  ───────────                                                 ║
-║  AWS ap-south-1 (Mumbai)                                     ║
-║  EC2 t2.micro — Free Tier                                    ║
-║  CloudWatch Monitoring                                       ║
+║  FRONTEND LAYER                                              ║
+║  ───────────────                                             ║
+║  React 19 + Recharts                                         ║
+║  Deployed on Vercel                                          ║
+║  fakenews-mlops.vercel.app                                   ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
