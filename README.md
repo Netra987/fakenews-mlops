@@ -1,193 +1,103 @@
 # Fake News Detection — MLOps Pipeline
 
-A production-grade MLOps pipeline for detecting fake news using DistilBERT,
-with full lifecycle management including data versioning, CI/CD,
-drift monitoring, and governance.
+**[Live demo](https://fakenews-mlops.vercel.app)** · **[API docs](https://fakenews-mlops.onrender.com/docs)** · **[Model on HuggingFace](https://huggingface.co/netra05/fakenews-distilbert)**
 
-**Accuracy: 99.9% | Drift Score: 0.832 | All 6 MLOps Units Covered**
+> First prediction after inactivity may take 20–30 seconds — Render free tier sleeps when unused, and the HuggingFace inference model needs to warm up.
 
----
-
-## What This Project Does
-
-This system takes any news article as input and predicts whether it is **fake or real**
-with a confidence score. Beyond prediction, it monitors itself over time — detecting
-when incoming news patterns have drifted so far from training data that the model
-needs retraining. This is the core problem MLOps solves.
+A DistilBERT-based fake news classifier with a full MLOps lifecycle — data versioning, CI/CD, live monitoring, drift detection, and governance reporting. Built to understand the gap between a model that works in a notebook and one you can trust in production.
 
 ---
 
-## Project Structure
-fakenews-mlops/
-├── src/
-│   ├── preprocess.py       # Cleans and splits raw CSV data
-│   ├── train.py            # Fine-tunes DistilBERT (run on Google Colab)
-│   ├── app.py              # FastAPI prediction endpoint
-│   ├── simulate_drift.py   # Simulates drifted news data
-│   ├── monitor.py          # Generates Evidently AI drift report
-│   ├── fairness.py         # Class balance and bias analysis
-│   ├── governance.py       # Creates audit trail JSON
-│   └── architecture.py     # AWS deployment architecture
-├── data/
-│   ├── raw/                # Original Kaggle CSVs (DVC tracked)
-│   └── processed/          # Cleaned train/test splits (DVC tracked)
-├── models/
-│   └── saved/              # Trained model files (download from Drive)
-├── reports/
-│   ├── model_card.md       # Responsible AI documentation
-│   ├── fairness_report.json
-│   ├── governance_audit.json
-│   └── aws_deployment_plan.md
-├── tests/
-│   └── test_preprocess.py  # CI test suite
-├── .github/workflows/
-│   └── ci.yml              # GitHub Actions CI pipeline
-└── Dockerfile              # Container configuration
+## The interesting part: a model that was *too* accurate
 
----
+The first version hit 99.9% accuracy almost immediately — which should make you suspicious, not happy. Digging into the data, I found that nearly all "real" news articles in the Kaggle dataset carried Reuters datelines (`WASHINGTON (Reuters) -`), while fake ones never did. The model wasn't learning to detect misinformation — it was learning to detect Reuters' writing format.
 
-## Running This Project
-
-### Prerequisites
-- Python 3.10
-- Git
-
-### Step 1 — Clone the repository
-```bash
-git clone https://github.com/Netra987/fakenews-mlops.git
-cd fakenews-mlops
-```
-
-### Step 2 — Create virtual environment
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Step 3 — Download the trained model
-The model file is 255MB and cannot be stored on GitHub.
-It is tracked via DVC and hosted on Google Drive.
-
-1. Download the model folder from: https://drive.google.com/drive/folders/1cZe3HeClpPJVQjVdx83r-JIjtZdFnWt4?usp=sharing
-2. You will find these 4 files inside:
-   - `config.json`
-   - `model.safetensors`
-   - `tokenizer_config.json`
-   - `tokenizer.json`
-3. Create this folder in your cloned project: `models/saved/`
-4. Place all 4 files inside `models/saved/`
-
-### Step 4 — Run the prediction API
-```bash
-uvicorn src.app:app --port 8000
-```
-Open **http://localhost:8000/docs** in your browser.
-
-- Click `POST /predict`
-- Click **Try it out**
-- Replace the text with any news article
-- Click **Execute**
-- See the prediction and confidence score
-
-Example input:
-```json
-{
-  "text": "Scientists confirm the earth revolves around the sun according to NASA research."
-}
-```
-
-Example output:
-```json
-{
-  "prediction": "real",
-  "confidence": 0.9991
-}
-```
-
-### Step 5 — Generate drift monitoring report
-```bash
-python src\simulate_drift.py
-python src\monitor.py
-start reports\drift_report.html
-```
-Opens an interactive HTML dashboard showing data drift detection.
-Current drift score: **0.832** — retraining recommended.
-
-### Step 6 — Run governance audit
-```bash
-python src\fairness.py
-python src\governance.py
-```
-Reports saved to the `reports/` folder.
+I stripped datelines during preprocessing and rebalanced classes 50/50. This is documented in `reports/fairness_report.json`. Training accuracy stayed at 99.9% after the fix — but as the external validation shows, that number alone still wasn't telling the whole story.
 
 ---
 
 ## Architecture
-DATA LAYER          TRAINING LAYER      SERVING LAYER
-──────────────      ──────────────      ─────────────
-Kaggle Dataset  →   Google Colab    →   FastAPI App
-DVC Versioning      DistilBERT          Port 8000
-MLflow Tracking     /predict endpoint
-99.9% Accuracy      Swagger UI
-CICD LAYER          MONITORING LAYER    GOVERNANCE LAYER
-──────────          ────────────────    ────────────────
-GitHub Actions  →   Evidently AI    →   Model Card
-Auto Tests          Drift Score 0.832   Fairness Report
-Every Push          Retraining Alert    GDPR Audit Trail
-CLOUD LAYER
-───────────
-AWS EC2 t2.micro — ap-south-1 Mumbai
-Free Tier — $0/month
-CloudWatch Monitoring
+
+DATA LAYER TRAINING LAYER SERVING LAYER
+────────────── ────────────── ─────────────
+Kaggle Dataset → Google Colab → FastAPI on Render
+DVC Versioning DistilBERT HF Inference API
+MLflow Tracking /predict endpoint
+
+CICD LAYER MONITORING LAYER GOVERNANCE LAYER
+────────── ──────────────── ────────────────
+GitHub Actions → Prometheus → Model Card
+Real API Tests Evidently AI Fairness Report
+17 tests passing Drift Score 0.83 GDPR Audit Trail
+
 
 ---
 
-## Topics Coverage
+## Quick start (local)
 
-| Topic | Implementation |
-|-------|----------------|
-| MLOps Introduction | Full pipeline architecture, responsible AI documentation |
-| Data Management | DVC versioning, preprocessing, class balance analysis |
-| Training & Deployment | DistilBERT fine-tuning, FastAPI, Docker, GitHub Actions CI/CD |
-| Model Monitoring | Evidently AI drift detection dashboard, drift score 0.832 |
-| Governance & Compliance | Model card, fairness report, GDPR audit trail |
-| MLOps for AWS | EC2 t2.micro architecture, Mumbai region, CloudWatch |
+```bash
+git clone https://github.com/Netra987/fakenews-mlops.git
+cd fakenews-mlops
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn src.app:app --port 8000
+
+cd fakenews-frontend && npm install && npm start
+```
 
 ---
 
-## Results
+## Results — the honest version
 
 | Metric | Value |
-|--------|-------|
+|---|---|
 | Training accuracy | 99.9% |
-| Test accuracy | 99.9% |
-| Dataset drift score | 0.832 (high — retraining needed) |
-| CI pipeline status | Passing |
-| API response time | ~3 seconds per prediction |
-| Deployment cost | $0 (AWS free tier) |
+| External validation accuracy | 71% (5/7 manually verified) |
+| Dataset drift score | 0.832 — retraining recommended |
+| CI status | Passing — 17 real API tests |
+| Live demo | https://fakenews-mlops.vercel.app |
+
+The gap between 99.9% training and 71% external accuracy is the most important number in this table. The model still generalizes imperfectly beyond its training distribution — likely because all data is US political news from 2016–2018. I'm reporting this because hiding it wouldn't make the model better, just the README less honest.
 
 ---
 
-## Tech Stack
+## Known limitations
+
+- Trained only on US political news (2016–2018) — performance on other domains, satire, or non-English content is unverified
+- External validation (71%) is meaningfully lower than training accuracy (99.9%)
+- HuggingFace free inference API returns 50% confidence on first call after inactivity (model cold start) — subsequent calls return real scores
+- `request_history` is in-memory only — resets on server restart, not suitable for multi-replica deployments
+
+## What I'd do next
+
+- Move `request_history` to Redis for persistent metrics across restarts
+- Retrain on recent news (2024–2026) to address the 0.832 drift score
+- Add a second real model variant for genuine A/B testing
+- Try a RAG-based fact-checking approach as comparison to pure classification
+
+---
+
+## MLOps coverage
+
+| Topic | Implementation |
+|---|---|
+| Data Management | DVC versioning, preprocessing, class balance analysis |
+| Training | DistilBERT fine-tuning, MLflow experiment tracking |
+| Serving | FastAPI, Docker, Render deployment |
+| Monitoring | Prometheus live metrics + Evidently AI drift detection |
+| Governance | Model card, fairness report, GDPR audit trail |
+| CI/CD | GitHub Actions — 17 real API tests with mocked model |
+| Frontend | React 19 + Recharts, Vercel deployment |
+
+## Tech stack
 
 | Category | Tools |
-|----------|-------|
-| Model | DistilBERT (HuggingFace Transformers) |
-| API | FastAPI + Uvicorn |
+|---|---|
+| Model | DistilBERT (HuggingFace), hosted on HF Hub |
+| API | FastAPI + Uvicorn, deployed on Render |
+| Frontend | React 19 + Recharts, deployed on Vercel |
 | Data versioning | DVC |
 | Experiment tracking | MLflow |
 | CI/CD | GitHub Actions |
-| Drift monitoring | Evidently AI |
+| Monitoring | Prometheus + Evidently AI |
 | Containerization | Docker |
-| Cloud | AWS EC2, S3, CloudWatch |
-| Language | Python 3.10 |
-
----
-
-## Key Insight
-
-> Fake news language evolves constantly. A model trained on 2018 news articles
-> will gradually fail on 2024 news — not because the code broke, but because
-> the world changed. This project demonstrates how MLOps solves exactly this
-> problem through continuous monitoring, drift detection, and governance.
